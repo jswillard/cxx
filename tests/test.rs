@@ -261,7 +261,10 @@ fn test_c_method_calls() {
     assert_eq!(2023, *ffi::Shared { z: 2023 }.c_method_mut_on_shared());
 
     let val = 42;
-    let mut array = ffi::Array { a: [0, 0, 0, 0] };
+    let mut array = ffi::Array {
+        a: [0, 0, 0, 0],
+        b: ffi::Buffer::default(),
+    };
     array.c_set_array(val);
     assert_eq!(array.a.len() as i32 * val, array.r_get_array_sum());
 }
@@ -278,6 +281,31 @@ fn test_shared_ptr_weak_ptr() {
     drop(shared_ptr);
     assert_eq!(0, ffi::c_get_use_count(&weak_ptr));
     assert!(weak_ptr.upgrade().is_null());
+}
+
+#[test]
+fn test_unique_to_shared_ptr_string() {
+    let unique = ffi::c_return_unique_ptr_string();
+    let ptr = &*unique as *const _;
+    let shared = unique.to_shared();
+    assert_eq!(&*shared as *const _, ptr);
+    assert_eq!(&*shared, "2020");
+}
+
+#[test]
+fn test_unique_to_shared_ptr_cpp_type() {
+    let unique = ffi::c_return_unique_ptr();
+    let ptr = &*unique as *const _;
+    let shared = unique.to_shared();
+    assert_eq!(&*shared as *const _, ptr);
+}
+
+#[test]
+fn test_unique_to_shared_ptr_null() {
+    let unique = cxx::UniquePtr::<ffi::C>::null();
+    assert!(unique.is_null());
+    let shared = unique.to_shared();
+    assert!(shared.is_null());
 }
 
 #[test]

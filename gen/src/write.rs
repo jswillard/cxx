@@ -470,7 +470,25 @@ fn check_trivial_extern_type(out: &mut OutFile, alias: &TypeAlias, reasons: &[Tr
     let id = alias.name.to_fully_qualified();
     out.builtin.relocatable = true;
     writeln!(out, "static_assert(");
-    writeln!(out, "    ::rust::IsRelocatable<{}>::value,", id);
+    if reasons
+        .iter()
+        .all(|r| matches!(r, TrivialReason::StructField(_)))
+    {
+        // If the type is only used as a struct field and not as by-value
+        // function argument or any other use, then C array of trivially
+        // relocatable type is also permissible.
+        //
+        //     --- means something sane:
+        //     struct T { char buf[N]; };
+        //
+        //     --- means something totally different:
+        //     void f(char buf[N]);
+        //
+        out.builtin.relocatable_or_array = true;
+        writeln!(out, "    ::rust::IsRelocatableOrArray<{}>::value,", id);
+    } else {
+        writeln!(out, "    ::rust::IsRelocatable<{}>::value,", id);
+    }
     writeln!(
         out,
         "    \"type {} should be trivially move constructible and trivially destructible in C++ to be used as {} in Rust\");",
@@ -1775,6 +1793,18 @@ fn write_shared_ptr(out: &mut OutFile, key: NamedImplKey) {
         writeln!(out, "  return uninit;");
         writeln!(out, "}}");
     }
+    begin_function_definition(out);
+    writeln!(
+        out,
+        "void cxxbridge1$shared_ptr${}$from_unmanaged(::std::shared_ptr<{}>* ptr, void* data) noexcept {{",
+        instance, inner,
+    );
+    writeln!(
+        out,
+        "new (ptr) std::shared_ptr<{}>(static_cast<{}*>(data));",
+        inner, inner
+    );
+    writeln!(out, "}}");
     begin_function_definition(out);
     writeln!(
         out,
